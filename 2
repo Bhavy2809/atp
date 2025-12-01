@@ -1,0 +1,92 @@
+# Program 2: Two TCP Flows (FTP + Telnet) Sharing a Bottleneck Link
+
+# Step 1: Simulator and Trace Files
+set ns [new Simulator]
+
+set tf2 [open tf2.tr w]
+$ns trace-all $tf2
+
+set nf2 [open nf2.nam w]
+$ns namtrace-all $nf2
+
+# File to log congestion window evolution
+set cwind [open win2.tr w]
+
+# Step 2: Create Nodes
+set n0 [$ns node]
+set n1 [$ns node]
+set n2 [$ns node]
+set n3 [$ns node]
+set n4 [$ns node]
+set n5 [$ns node]
+
+# Step 3: Create Links
+$ns duplex-link $n0 $n2 2Mb 2ms DropTail
+$ns duplex-link $n1 $n2 2Mb 2ms DropTail
+
+# Bottleneck link
+$ns duplex-link $n2 $n3 0.4Mb 5ms DropTail
+
+$ns duplex-link $n3 $n4 2Mb 2ms DropTail
+$ns duplex-link $n3 $n5 2Mb 2ms DropTail
+
+# Step 4: TCP Flow 1 (FTP: n0 -> n5)
+set tcp1 [new Agent/TCP]
+$ns attach-agent $n0 $tcp1
+
+set tcpsink1 [new Agent/TCPSink]
+$ns attach-agent $n5 $tcpsink1
+
+$ns connect $tcp1 $tcpsink1
+
+set ftp1 [new Application/FTP]
+$ftp1 attach-agent $tcp1
+
+$ns at 1.2 "$ftp1 start"
+$ns at 5.0 "$ftp1 stop"
+
+# Step 5: TCP Flow 2 (Telnet: n1 -> n4)
+set tcp2 [new Agent/TCP]
+$ns attach-agent $n1 $tcp2
+
+set tcpsink2 [new Agent/TCPSink]
+$ns attach-agent $n4 $tcpsink2
+
+$ns connect $tcp2 $tcpsink2
+
+set telnet1 [new Application/Telnet]
+$telnet1 attach-agent $tcp2
+
+$ns at 5.1 "$telnet1 start"
+# Telnet will run till finish time
+
+# Step 6: Congestion Window Plot Procedure
+proc plotWindow {tcpSource file} {
+    global ns
+    set time 0.01
+    set now [$ns now]
+    set cwnd [$tcpSource set cwnd_]
+    puts $file "$now $cwnd"
+    $ns at [expr $now + $time] "plotWindow $tcpSource $file"
+}
+
+# Start plotting cwnd for both TCP flows
+$ns at 2.0 "plotWindow $tcp1 $cwind"
+$ns at 5.5 "plotWindow $tcp2 $cwind"
+
+# Step 7: Finish Procedure
+proc finish {} {
+    global ns tf2 nf2 cwind
+    $ns flush-trace
+    close $tf2
+    close $nf2
+    close $cwind
+    exec nam nf2.nam &
+    exec xgraph win2.tr &
+    exit 0
+}
+
+$ns at 10.0 "finish"
+
+# Run the simulation
+$ns run

@@ -1,0 +1,103 @@
+# Program 4 – TCP File Transfer + Throughput Using AWK + XGraph
+
+# Create simulator
+set ns [new Simulator]
+
+# Trace files
+set tracefile [open ex5.tr w]
+$ns trace-all $tracefile
+
+set namfile [open ex5.nam w]
+$ns namtrace-all $namfile
+
+# Nodes: Server (s) and Client (c)
+set s [$ns node]
+set c [$ns node]
+
+# Labels for NAM
+$s label "Server"
+$c label "Client"
+
+# Flow ID -> color in NAM
+$ns color 1 Blue
+
+# Create link
+$ns duplex-link $s $c 10Mb 22ms DropTail
+$ns duplex-link-op $s $c orient right
+
+# TCP Agent on server
+set tcp0 [new Agent/TCP]
+$tcp0 set fid_ 1
+$tcp0 set packetSize_ 1500
+$ns attach-agent $s $tcp0
+
+# TCPSink Agent on client
+set sink0 [new Agent/TCPSink]
+$ns attach-agent $c $sink0
+
+# Connect server TCP → client sink
+$ns connect $tcp0 $sink0
+
+# FTP Application
+set ftp0 [new Application/FTP]
+$ftp0 attach-agent $tcp0
+
+# Finish procedure
+proc finish {} {
+    global ns tracefile namfile
+    $ns flush-trace
+    close $tracefile
+    close $namfile
+
+    # Run NAM animation
+    exec nam ex5.nam &
+
+    # Calculate throughput using AWK scripts
+    exec awk -f ex5transfer.awk ex5.tr &
+
+    # Convert trace into MB vs time for xgraph
+    exec awk -f ex5convert.awk ex5.tr > convert.tr &
+
+    exec xgraph convert.tr -geometry 800x400 \
+        -t "Data Received at Client" \
+        -x "Time (seconds)" -y "MB Received" &
+
+    exit 0
+}
+
+# Start and stop FTP
+$ns at 0.01 "$ftp0 start"
+$ns at 15.0 "$ftp0 stop"
+
+# Call finish
+$ns at 15.1 "finish"
+
+# Run simulation
+$ns run
+BEGIN {
+    total_bytes_sent = 0
+    total_bytes_received = 0
+    last_time = 0
+}
+{
+    if ( $1 == "r" && $4 == 1 && $5 == "tcp" ) {
+        total_bytes_received += $6
+        last_time = $2
+    }
+    if ( $1 == "+" && $3 == 0 && $5 == "tcp" ) {
+        total_bytes_sent += $6
+    }
+}
+END {
+    printf("\nTransmission time = %f sec", last_time)
+    printf("\nData sent from server = %f Mbps", (total_bytes_sent * 8) / (last_time * 1000000))
+    printf("\nData received by client = %f Mbps\n", (total_bytes_received * 8) / (last_time * 1000000))
+}
+BEGIN { count = 0 }
+{
+    if ( $1 == "r" && $4 == 1 && $5 == "tcp" ) {
+        count += $6
+        printf("%f\t%f\n", $2, count / 1000000)
+    }
+}
+END { }
