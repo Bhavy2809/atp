@@ -1,0 +1,141 @@
+# Multicast Routing – Program 5
+# Group 1: nodes 2, 3, 4
+# Group 2: nodes 5, 6, 7
+
+set ns [new Simulator -multicast on]
+
+set tf [open mcast.tr w]
+$ns trace-all $tf
+
+set fd [open mcast.nam w]
+$ns namtrace-all $fd
+
+# Nodes
+set n0 [$ns node]
+set n1 [$ns node]
+set n2 [$ns node]
+set n3 [$ns node]
+set n4 [$ns node]
+set n5 [$ns node]
+set n6 [$ns node]
+set n7 [$ns node]
+
+# Links
+$ns duplex-link $n0 $n2 1.5Mb 10ms DropTail
+$ns duplex-link $n1 $n2 1.5Mb 10ms DropTail
+$ns duplex-link $n2 $n3 1.5Mb 10ms DropTail
+$ns duplex-link $n3 $n4 1.5Mb 10ms DropTail
+$ns duplex-link $n3 $n7 1.5Mb 10ms DropTail
+$ns duplex-link $n4 $n5 1.5Mb 10ms DropTail
+$ns duplex-link $n4 $n6 1.5Mb 10ms DropTail
+
+# Multicast Routing Protocol (Dense Mode)
+set mproto DM
+set mrthandle [$ns mrtproto $mproto {}]
+
+# Multicast groups
+set group1 [Node allocaddr]
+set group2 [Node allocaddr]
+
+# ---------- Source 1 -> group1 ----------
+set udp0 [new Agent/UDP]
+$ns attach-agent $n0 $udp0
+$udp0 set dst_addr_ $group1
+$udp0 set dst_port_ 0
+
+set cbr1 [new Application/Traffic/CBR]
+$cbr1 attach-agent $udp0
+$cbr1 set packetSize_ 512
+$cbr1 set interval_ 0.05
+
+# ---------- Source 2 -> group2 ----------
+set udp1 [new Agent/UDP]
+$ns attach-agent $n1 $udp1
+$udp1 set dst_addr_ $group2
+$udp1 set dst_port_ 0
+
+set cbr2 [new Application/Traffic/CBR]
+$cbr2 attach-agent $udp1
+$cbr2 set packetSize_ 512
+$cbr2 set interval_ 0.05
+
+# ---------- Receivers for Group 1: nodes 2, 3, 4 ----------
+set r1 [new Agent/Null]
+$ns attach-agent $n2 $r1
+$ns at 1.0 "$n2 join-group $r1 $group1"
+
+set r2 [new Agent/Null]
+$ns attach-agent $n3 $r2
+$ns at 1.5 "$n3 join-group $r2 $group1"
+
+set r3 [new Agent/Null]
+$ns attach-agent $n4 $r3
+$ns at 2.0 "$n4 join-group $r3 $group1"
+
+# ---------- Receivers for Group 2: nodes 5, 6, 7 ----------
+set r4 [new Agent/Null]
+$ns attach-agent $n5 $r4
+$ns at 2.5 "$n5 join-group $r4 $group2"
+
+set r5 [new Agent/Null]
+$ns attach-agent $n6 $r5
+$ns at 3.0 "$n6 join-group $r5 $group2"
+
+set r6 [new Agent/Null]
+$ns attach-agent $n7 $r6
+$ns at 3.5 "$n7 join-group $r6 $group2"
+
+# ---------- Leave events ----------
+$ns at 4.0 "$n2 leave-group $r1 $group1"
+$ns at 4.5 "$n3 leave-group $r2 $group1"
+$ns at 5.0 "$n4 leave-group $r3 $group1"
+
+$ns at 5.5 "$n5 leave-group $r4 $group2"
+$ns at 6.0 "$n6 leave-group $r5 $group2"
+$ns at 6.5 "$n7 leave-group $r6 $group2"
+
+# ---------- Traffic start/stop ----------
+$ns at 0.5 "$cbr1 start"
+$ns at 9.5 "$cbr1 stop"
+
+$ns at 0.5 "$cbr2 start"
+$ns at 9.5 "$cbr2 stop"
+
+# ---------- Colors & Labels ----------
+$n0 label "Source 1"
+$n1 label "Source 2"
+$n0 color red
+$n1 color green
+
+# Colors for packets of each group
+$ns color 1 red
+$ns color 2 green
+$udp0 set fid_ 1
+$udp1 set fid_ 2
+
+$n2 label "G1 Rcvr"
+$n3 label "G1 Rcvr"
+$n4 label "G1 Rcvr"
+$n5 label "G2 Rcvr"
+$n6 label "G2 Rcvr"
+$n7 label "G2 Rcvr"
+
+$n2 color blue
+$n3 color blue
+$n4 color blue
+$n5 color yellow
+$n6 color yellow
+$n7 color yellow
+
+# ---------- Finish ----------
+proc finish {} {
+    global ns tf fd
+    $ns flush-trace
+    close $tf
+    close $fd
+    exec nam mcast.nam &
+    exit 0
+}
+
+$ns at 10.0 "finish"
+$ns run
